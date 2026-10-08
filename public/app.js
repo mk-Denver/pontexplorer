@@ -54,22 +54,9 @@ async function loadRelays() {
     const r = await fetch('/api/relays');
     const d = await r.json();
     defaultRelays = d.defaultRelays || [];
-    const stored = localStorage.getItem('pontexplorer_relays');
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length) {
-          currentRelays = parsed;
-          await pushRelaysToServer(parsed);
-        } else {
-          currentRelays = d.relays || [...defaultRelays];
-        }
-      } catch {
-        currentRelays = d.relays || [...defaultRelays];
-      }
-    } else {
-      currentRelays = d.relays || [...defaultRelays];
-    }
+    // server is source of truth on load; sync localStorage to match
+    currentRelays = d.relays && d.relays.length ? d.relays : [...defaultRelays];
+    saveRelays();
     renderRelayChips();
     updateSourceInfo();
   } catch { currentRelays = []; }

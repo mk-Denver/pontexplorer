@@ -6,7 +6,7 @@ import { safeParseJSON, tagsByName } from './tags.js';
 export const DEFAULT_RELAYS = [
   'wss://relay.damus.io',
   'wss://nos.lol',
-  'wss://relay.nostr.band',
+  'wss://relay.primal.net',
 ];
 
 function groupByRoot(events: NostrEvent[]): Map<Hex, NostrEvent[]> {
@@ -83,8 +83,10 @@ export class OfflineSource implements EventSource {
 
 export class RelaySource implements EventSource {
   private pool: SimplePool;
+  private descPool: SimplePool;
   constructor(private relays: string[] = DEFAULT_RELAYS) {
     this.pool = new SimplePool();
+    this.descPool = new SimplePool();
   }
 
   private async querySync(filter: any, maxWait = 8000): Promise<NostrEvent[]> {
@@ -95,6 +97,20 @@ export class RelaySource implements EventSource {
       ),
     ]) as NostrEvent[];
     return result || [];
+  }
+
+  private async getWithTimeout(filter: any, maxWait = 8000): Promise<NostrEvent | undefined> {
+    try {
+      const got = await Promise.race([
+        this.descPool.get(this.relays, filter as any),
+        new Promise<NostrEvent | undefined>((_, rej) =>
+          setTimeout(() => rej(new Error('relay get timeout')), maxWait + 3000),
+        ),
+      ]);
+      return got as NostrEvent | undefined;
+    } catch {
+      return undefined;
+    }
   }
 
   async fetchRoots(): Promise<NostrEvent[]> {
@@ -153,18 +169,16 @@ export class RelaySource implements EventSource {
       g.addrs.push(addr);
     }
     for (const g of byAuthor.values()) {
-      try {
-        const got = await this.pool.get(this.relays, {
-          kinds: [g.kind],
-          authors: [g.pubkey],
-          '#d': g.dTags,
-        } as any);
-        if (got) {
-          const d = tagsByName(got, 'd').map((t) => t[1])[0];
-          const addr = addrs.find((a) => a.endsWith(':' + d));
-          if (addr) out.set(addr, got as NostrEvent);
-        }
-      } catch {}
+      const got = await this.getWithTimeout({
+        kinds: [g.kind],
+        authors: [g.pubkey],
+        '#d': g.dTags,
+      });
+      if (got) {
+        const d = tagsByName(got, 'd').map((t) => t[1])[0];
+        const addr = addrs.find((a) => a.endsWith(':' + d));
+        if (addr) out.set(addr, got as NostrEvent);
+      }
     }
     return out;
   }
@@ -172,22 +186,22 @@ export class RelaySource implements EventSource {
   async fetchDescriptorByAddr(addr: string): Promise<NostrEvent | undefined> {
     const [kindStr, pubkey, d] = addr.split(':');
     const kind = Number(kindStr);
-    const got = await this.pool.get(this.relays, {
+    return this.getWithTimeout({
       kinds: [kind],
       authors: [pubkey],
       '#d': [d],
-    } as any);
-    return got as NostrEvent | undefined;
+    });
   }
 
   async fetchDescriptorById(id: Hex): Promise<NostrEvent | undefined> {
-    const got = await this.pool.get(this.relays, { ids: [id] } as any);
-    return got as NostrEvent | undefined;
+    return this.getWithTimeout({ ids: [id] });
   }
 
   async close() {
-    try {
-      (this.pool as any).close(this.relays);
-    } catch {}
+    for (const p of [this.pool, this.descPool]) {
+      try {
+        (p as any).close(this.relays);
+      } catch {}
+    }
   }
 }

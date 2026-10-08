@@ -60,6 +60,8 @@ npm run dev -- --relay wss://relay.damus.io,wss://nos.lol list
 npm run server -- --relay wss://relay.damus.io
 ```
 
+The default relay set is `wss://relay.damus.io`, `wss://nos.lol`, and `wss://relay.primal.net`.
+
 > **Note:** as of October 2026, there are already live `pontmore/swap@1` v2 coordination chains on public Nostr relays (test swaps on `spark` network with KES/sats terms). Run `npm run dev -- --relay wss://relay.damus.io,wss://nos.lol list` to see them. The explorer fetches all roots in one batched query, then all actions and descriptors in parallel, so it handles dozens of swaps in seconds.
 
 ## Commands
@@ -75,7 +77,7 @@ Commands:
 
 Sources (choose one):
   --offline <file>     read events from a local JSON file
-  --relay <wss://...>  comma-separated relays (default: a small public set)
+  --relay <wss://...>  comma-separated relays (default: wss://relay.damus.io,wss://nos.lol,wss://relay.primal.net)
 ```
 
 ### HTTP server + web UI
@@ -89,11 +91,12 @@ Endpoints:
 | Method | Path                  | Description                                  |
 |--------|-----------------------|----------------------------------------------|
 | GET    | `/api/health`         | server + source info                          |
-| GET    | `/api/relays`         | default relay list                            |
+| GET    | `/api/relays`         | current + default relay list                  |
+| POST   | `/api/relays`         | update the active relay list (`{ relays: [...] }`) |
 | GET    | `/api/swaps`          | summary list of all reconstructed swaps       |
 | GET    | `/api/swaps/:id`      | full detail for one swap (`:id` may be `latest` or a prefix) |
 
-The web UI (`/`) shows a filterable swap list and a detailed pane with the canonical action timeline, participants, derived roles, descriptor, dispute info, forks, and anomalies.
+The web UI (`/`) shows a filterable swap list and a detailed pane with the canonical action timeline, participants, derived roles, descriptor, dispute info, forks, and anomalies. Swaps are **not** fetched automatically on page load — press the **Fetch from relays** button (or `↻` / `Ctrl+R`) to query the configured relays and populate the list. The relay bar lets you add, remove, or reset relays at runtime; the active set is pushed to the server via `POST /api/relays`.
 
 ## Scripts
 
