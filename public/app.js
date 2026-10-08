@@ -3,7 +3,8 @@ import { RelaySource, DEFAULT_RELAYS, listSwaps, npub, fmtEat } from './core.js'
 const $ = (s) => document.querySelector(s);
 const rowsEl = $('#swap-rows');
 const statusEl = $('#status');
-const detailEl = $('#detail-pane');
+const detailEl = $('#detail-content');
+const detailPane = $('#detail-pane');
 const filterEl = $('#filter');
 const sourceEl = $('#source-info');
 const relayChipsEl = $('#relay-chips');
@@ -11,6 +12,7 @@ const relayInput = $('#relay-input');
 const relayAddBtn = $('#relay-add-btn');
 const relayResetBtn = $('#relay-reset');
 const fetchBtn = $('#fetch-relays');
+const backBtn = $('#back-btn');
 
 let allSwaps = [];
 let allResults = [];
@@ -253,10 +255,17 @@ function renderRows() {
 function select(id) {
   selectedId = id;
   renderRows();
+  detailPane.classList.add('mobile-open');
   const found = allResults.find((r) => r.rootEvent.id === id || r.rootEvent.id.startsWith(id));
   if (!found) { detailEl.innerHTML = `<div class="placeholder">not found: ${esc(short(id, 8))}</div>`; return; }
   if (!found.reconstruction) { detailEl.innerHTML = `<div class="placeholder">invalid root: ${esc(found.rootIssues.join('; '))}</div>`; return; }
   renderDetail(detail(found.reconstruction));
+}
+
+function closeDetail() {
+  detailPane.classList.remove('mobile-open');
+  selectedId = null;
+  renderRows();
 }
 
 function renderDetail(d) {
@@ -355,7 +364,8 @@ function updateSourceInfo() {
 filterEl.addEventListener('input', renderRows);
 $('#refresh').addEventListener('click', loadList);
 fetchBtn.addEventListener('click', loadList);
-document.addEventListener('keydown', (e) => { if (e.key === 'r' && e.ctrlKey) { e.preventDefault(); loadList(); } });
+backBtn.addEventListener('click', closeDetail);
+document.addEventListener('keydown', (e) => { if (e.key === 'r' && e.ctrlKey) { e.preventDefault(); loadList(); } if (e.key === 'Escape') { closeDetail(); } });
 
 /* ── init ── */
 loadRelays();
