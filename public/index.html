@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Pontmore Swap Explorer</title>
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <span class="logo">⌁</span>
+      <div>
+        <h1>Pontmore Swap Explorer</h1>
+        <p class="sub">read-only PIP-02 coordination event chains &middot; <code>pontmore/swap@1</code> &middot; <span class="tz-badge">EAT (UTC+3)</span></p>
+      </div>
+    </div>
+    <div id="source-info" class="source-info">loading…</div>
+  </header>
+
+  <div id="relay-bar" class="relay-bar">
+    <div class="relay-bar-inner">
+      <span class="relay-label">Relays:</span>
+      <div id="relay-chips" class="relay-chips"></div>
+      <div class="relay-add">
+        <input id="relay-input" type="text" placeholder="wss://…" spellcheck="false" />
+        <button id="relay-add-btn" title="add relay">+</button>
+      </div>
+      <button id="relay-reset" class="relay-reset" title="reset to defaults">reset</button>
+    </div>
+  </div>
+
+  <main>
+    <section class="list-pane">
+      <div class="toolbar">
+        <input id="filter" type="search" placeholder="filter by state, id, npub…" />
+        <button id="fetch-relays" class="fetch-btn" title="fetch swaps from configured relays">Fetch from relays</button>
+        <button id="refresh" title="reload">↻</button>
+      </div>
+      <div class="table-wrap">
+        <table id="swap-table">
+          <thead>
+            <tr>
+              <th>State</th>
+              <th>Terms</th>
+              <th class="num">Acts</th>
+              <th class="num">Anom</th>
+              <th class="num">Fork</th>
+              <th>Created (EAT)</th>
+              <th>Root</th>
+            </tr>
+          </thead>
+          <tbody id="swap-rows"></tbody>
+        </table>
+      </div>
+      <div id="status" class="status"></div>
+    </section>
+
+    <section class="detail-pane" id="detail-pane">
+      <div class="placeholder">Select a swap to inspect its reconstructed state.</div>
+    </section>
+  </main>
+
+  <footer>
+    <p>State is derived by replaying signed Nostr events. No private data, escrow database, or API credentials are used. Public keys and public terms are visible by design (PIP-02 pseudonymity, not anonymity). Timestamps shown in East Africa Time (EAT, UTC+3).</p>
+  </footer>
+
+  <script src="/app.js"></script>
+</body>
+</html>

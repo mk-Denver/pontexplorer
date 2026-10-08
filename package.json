@@ -1,0 +1,32 @@
+{
+  "name": "pontexplorer",
+  "version": "0.1.0",
+  "description": "Read-only Pontmore swap explorer. Reconstructs PIP-02 coordination event chains and pontmore/swap@1 swap state from public Nostr events.",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "tsx src/cli.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/cli.js",
+    "server": "tsx src/server.ts",
+    "fixtures": "tsx src/fixtures.ts",
+    "test": "tsx src/test.ts",
+    "lint": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "nostr-tools": "^2.10.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/ws": "^8.5.13",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true
+  }
+}
