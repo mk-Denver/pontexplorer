@@ -1,3 +1,5 @@
+import { RelaySource, DEFAULT_RELAYS, listSwaps, npub, fmtEat } from './core.js';
+
 const $ = (s) => document.querySelector(s);
 const rowsEl = $('#swap-rows');
 const statusEl = $('#status');
@@ -8,11 +10,13 @@ const relayChipsEl = $('#relay-chips');
 const relayInput = $('#relay-input');
 const relayAddBtn = $('#relay-add-btn');
 const relayResetBtn = $('#relay-reset');
+const fetchBtn = $('#fetch-relays');
 
 let allSwaps = [];
+let allResults = [];
 let selectedId = null;
 let currentRelays = [];
-let defaultRelays = [];
+let defaultRelays = [...DEFAULT_RELAYS];
 
 function esc(s) { return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 function short(h, n = 8) { return h && h.length > n * 2 + 1 ? `${h.slice(0, n)}…${h.slice(-n)}` : h; }
@@ -33,7 +37,110 @@ function stateBadges(s) {
   return out.join(' ');
 }
 
-/* ── relay management ── */
+/* ── data: summary + detail (ported from server.ts) ── */
+
+function summary(r) {
+  const t = r.rootContent.terms;
+  return {
+    id: r.root.id,
+    created_at: r.root.created_at,
+    created_at_eat: fmtEat(r.root.created_at),
+    state: r.state,
+    terminal: r.terminal,
+    disputed: r.disputed,
+    forks: r.forks.length,
+    anomalies: r.anomalies.length,
+    accepted: r.acceptedCount,
+    direction: t.direction,
+    terms: {
+      fiat: t.fiat,
+      bitcoin: t.bitcoin,
+      payment_channel: t.payment_channel,
+    },
+    proposer: npub(r.participants.proposer),
+  };
+}
+
+function detail(r) {
+  return {
+    id: r.root.id,
+    created_at: r.root.created_at,
+    created_at_eat: fmtEat(r.root.created_at),
+    state: r.state,
+    preDisputeState: r.preDisputeState,
+    terminal: r.terminal,
+    disputed: r.disputed,
+    profile: r.rootContent.profile,
+    expires_at: r.rootContent.expires_at,
+    expires_at_eat: fmtEat(r.rootContent.expires_at),
+    terms: r.rootContent.terms,
+    participants: {
+      'swap/agent': npub(r.participants.agent),
+      'swap/customer': npub(r.participants.customer),
+      'core/escrow': npub(r.participants.escrow),
+      'core/resolver': r.participants.resolver ? npub(r.participants.resolver) : null,
+      proposer: npub(r.participants.proposer),
+      accepter: npub(r.participants.accepter),
+    },
+    participantPubkeys: {
+      'swap/agent': r.participants.agent,
+      'swap/customer': r.participants.customer,
+      'core/escrow': r.participants.escrow,
+      'core/resolver': r.participants.resolver ?? null,
+      proposer: r.participants.proposer,
+      accepter: r.participants.accepter,
+    },
+    derived: r.derived,
+    descriptor: r.descriptor
+      ? {
+          valid: r.descriptor.valid,
+          issues: r.descriptor.issues,
+          content: JSON.parse(r.descriptor.event.content),
+          id: r.descriptor.event.id,
+          created_at: r.descriptor.event.created_at,
+          created_at_eat: fmtEat(r.descriptor.event.created_at),
+          pubkey: r.descriptor.event.pubkey,
+        }
+      : null,
+    canonical: r.canonical.map((a, i) => ({
+      index: i + 1,
+      action: a.action,
+      signer: a.signer,
+      signerNpub: npub(a.signer),
+      created_at: a.created_at,
+      created_at_eat: fmtEat(a.created_at),
+      id: a.id,
+      data: a.data ?? null,
+    })),
+    forks: r.forks.map((f) => ({
+      atPrev: f.atPrev,
+      actions: f.actions.map((e) => {
+        const c = JSON.parse(e.content);
+        return { id: e.id, action: c.action, signer: e.pubkey, signerNpub: npub(e.pubkey), created_at: e.created_at, created_at_eat: fmtEat(e.created_at) };
+      }),
+    })),
+    anomalies: r.anomalies,
+    dispute: r.dispute
+      ? {
+          openedAt: r.dispute.openedAt,
+          openedAt_eat: fmtEat(r.dispute.openedAt),
+          openedBy: r.dispute.openedBy,
+          openedByNpub: npub(r.dispute.openedBy),
+          class: r.dispute.class ?? null,
+          openedActionId: r.dispute.openedActionId,
+          resolvedAt: r.dispute.resolvedAt ?? null,
+          resolvedAt_eat: r.dispute.resolvedAt ? fmtEat(r.dispute.resolvedAt) : null,
+          resolvedBy: r.dispute.resolvedBy ?? null,
+          resolvedByNpub: r.dispute.resolvedBy ? npub(r.dispute.resolvedBy) : null,
+          resolvedActionId: r.dispute.resolvedActionId ?? null,
+          effect: r.dispute.effect ?? null,
+          policy: r.dispute.policy ?? null,
+        }
+      : null,
+  };
+}
+
+/* ── relay management (localStorage only, no server) ── */
 
 function renderRelayChips() {
   const defSet = new Set(defaultRelays);
@@ -49,34 +156,32 @@ function renderRelayChips() {
   );
 }
 
-async function loadRelays() {
-  try {
-    const r = await fetch('/api/relays');
-    const d = await r.json();
-    defaultRelays = d.defaultRelays || [];
-    // server is source of truth on load; sync localStorage to match
-    currentRelays = d.relays && d.relays.length ? d.relays : [...defaultRelays];
-    saveRelays();
-    renderRelayChips();
-    updateSourceInfo();
-  } catch { currentRelays = []; }
-}
-
-async function pushRelaysToServer(relays) {
-  try {
-    await fetch('/api/relays', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ relays }),
-    });
-  } catch {}
+function loadRelays() {
+  defaultRelays = [...DEFAULT_RELAYS];
+  const stored = localStorage.getItem('pontexplorer_relays');
+  if (stored) {
+    try {
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed) && parsed.length) {
+        currentRelays = parsed;
+      } else {
+        currentRelays = [...defaultRelays];
+      }
+    } catch {
+      currentRelays = [...defaultRelays];
+    }
+  } else {
+    currentRelays = [...defaultRelays];
+  }
+  renderRelayChips();
+  updateSourceInfo();
 }
 
 function saveRelays() {
   localStorage.setItem('pontexplorer_relays', JSON.stringify(currentRelays));
 }
 
-async function addRelay() {
+function addRelay() {
   const val = relayInput.value.trim();
   if (!val) return;
   if (!/^wss?:\/\/.+/.test(val)) { relayInput.style.borderColor = 'var(--red)'; return; }
@@ -86,25 +191,19 @@ async function addRelay() {
   saveRelays();
   renderRelayChips();
   relayInput.value = '';
-  await pushRelaysToServer(currentRelays);
-  loadList();
 }
 
-async function removeRelay(r) {
+function removeRelay(r) {
   if (currentRelays.length <= 1) return;
   currentRelays = currentRelays.filter((x) => x !== r);
   saveRelays();
   renderRelayChips();
-  await pushRelaysToServer(currentRelays);
-  loadList();
 }
 
-async function resetRelays() {
+function resetRelays() {
   currentRelays = [...defaultRelays];
   localStorage.removeItem('pontexplorer_relays');
   renderRelayChips();
-  await pushRelaysToServer(currentRelays);
-  loadList();
 }
 
 relayAddBtn.addEventListener('click', addRelay);
@@ -115,14 +214,18 @@ relayResetBtn.addEventListener('click', resetRelays);
 
 async function loadList() {
   statusEl.textContent = 'fetching swaps…';
+  const source = new RelaySource(currentRelays);
   try {
-    const res = await fetch('/api/swaps');
-    const data = await res.json();
-    allSwaps = data.swaps || [];
-    statusEl.textContent = `${allSwaps.length} swap(s)${data.invalidRoots?.length ? ` · ${data.invalidRoots.length} invalid root(s)` : ''}`;
+    const results = await listSwaps(source);
+    allResults = results;
+    allSwaps = results.filter((r) => r.reconstruction).map((r) => summary(r.reconstruction));
+    const invalidCount = results.filter((r) => !r.reconstruction).length;
+    statusEl.textContent = `${allSwaps.length} swap(s)${invalidCount ? ` · ${invalidCount} invalid root(s)` : ''}`;
     renderRows();
   } catch (e) {
     statusEl.textContent = 'error: ' + e.message;
+  } finally {
+    await source.close?.();
   }
 }
 
@@ -147,18 +250,13 @@ function renderRows() {
 
 /* ── swap detail ── */
 
-async function select(id) {
+function select(id) {
   selectedId = id;
   renderRows();
-  detailEl.innerHTML = `<div class="placeholder">loading ${esc(short(id, 8))}…</div>`;
-  try {
-    const res = await fetch('/api/swaps/' + encodeURIComponent(id));
-    const d = await res.json();
-    if (!res.ok) { detailEl.innerHTML = `<div class="placeholder">Error: ${esc(d.error || res.status)}</div>`; return; }
-    renderDetail(d);
-  } catch (e) {
-    detailEl.innerHTML = `<div class="placeholder">Error: ${esc(e.message)}</div>`;
-  }
+  const found = allResults.find((r) => r.rootEvent.id === id || r.rootEvent.id.startsWith(id));
+  if (!found) { detailEl.innerHTML = `<div class="placeholder">not found: ${esc(short(id, 8))}</div>`; return; }
+  if (!found.reconstruction) { detailEl.innerHTML = `<div class="placeholder">invalid root: ${esc(found.rootIssues.join('; '))}</div>`; return; }
+  renderDetail(detail(found.reconstruction));
 }
 
 function renderDetail(d) {
@@ -174,7 +272,7 @@ function renderDetail(d) {
   parts.push(kv('direction', d.direction));
   parts.push(kv('terms', `${t.fiat.amount} ${t.fiat.currency} ↔ ${t.bitcoin.amount} ${t.bitcoin.unit} on ${t.bitcoin.network}`));
   parts.push(kv('payment_channel', t.payment_channel));
-  parts.push(kv('deadlines', `fiat_pay_by=${fmtEAT(t.deadlines.fiat_pay_by)}<br>fiat_confirm_by=${fmtEAT(t.deadlines.fiat_confirm_by)}`));
+  parts.push(kv('deadlines', `fiat_pay_by=${fmtEat(t.deadlines.fiat_pay_by)}<br>fiat_confirm_by=${fmtEat(t.deadlines.fiat_confirm_by)}`));
 
   parts.push(`<h2>Participants</h2>`);
   for (const [role, npub2] of Object.entries(d.participants)) {
@@ -193,7 +291,7 @@ function renderDetail(d) {
     parts.push(kv('created (EAT)', d.descriptor.created_at_eat));
     parts.push(kv('escrow_type', d.descriptor.content.escrow_type));
     parts.push(kv('networks', d.descriptor.content.networks.join(', ')));
-    parts.push(kv('expires_at', d.descriptor.content.expires_at + ' (' + fmtEAT(d.descriptor.content.expires_at) + ')'));
+    parts.push(kv('expires_at', d.descriptor.content.expires_at + ' (' + fmtEat(d.descriptor.content.expires_at) + ')'));
     if (d.descriptor.issues?.length) parts.push(`<div class="anomaly">${d.descriptor.issues.map(esc).join('<br>')}</div>`);
   } else {
     parts.push(`<div class="empty">not found</div>`);
@@ -250,24 +348,9 @@ function kv(k, v, mono, cls) {
   return `<div class="kv"><div class="k">${esc(k)}</div><div class="v ${cls || ''}">${v}</div></div>`;
 }
 
-/* ── EAT helper (client-side, mirrors server fmtEat) ── */
-function fmtEAT(unixTs) {
-  if (unixTs == null) return '';
-  const d = new Date((unixTs + 3 * 3600) * 1000);
-  const y = d.getUTCFullYear();
-  const m = String(d.getUTCMonth() + 1).padStart(2, '0');
-  const day = String(d.getUTCDate()).padStart(2, '0');
-  const h = String(d.getUTCHours()).padStart(2, '0');
-  const min = String(d.getUTCMinutes()).padStart(2, '0');
-  const s = String(d.getUTCSeconds()).padStart(2, '0');
-  return `${y}-${m}-${day} ${h}:${min}:${s} EAT`;
-}
-
 function updateSourceInfo() {
   sourceEl.textContent = currentRelays.length + ' relay(s): ' + currentRelays.join(', ');
 }
-
-const fetchBtn = $('#fetch-relays');
 
 filterEl.addEventListener('input', renderRows);
 $('#refresh').addEventListener('click', loadList);
@@ -275,5 +358,5 @@ fetchBtn.addEventListener('click', loadList);
 document.addEventListener('keydown', (e) => { if (e.key === 'r' && e.ctrlKey) { e.preventDefault(); loadList(); } });
 
 /* ── init ── */
-await loadRelays();
+loadRelays();
 statusEl.textContent = 'Click "Fetch from relays" to load swaps from ' + currentRelays.length + ' relay(s).';

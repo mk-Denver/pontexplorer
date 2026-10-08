@@ -1,4 +1,5 @@
 node_modules/
 dist/
 fixtures/events.json
+public/core.js
 *.log

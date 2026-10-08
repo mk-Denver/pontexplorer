@@ -98,6 +98,16 @@ Endpoints:
 
 The web UI (`/`) shows a filterable swap list and a detailed pane with the canonical action timeline, participants, derived roles, descriptor, dispute info, forks, and anomalies. Swaps are **not** fetched automatically on page load — press the **Fetch from relays** button (or `↻` / `Ctrl+R`) to query the configured relays and populate the list. The relay bar lets you add, remove, or reset relays at runtime; the active set is pushed to the server via `POST /api/relays`.
 
+## Netlify deployment
+
+The web UI runs entirely client-side — it bundles `src/core/` (via esbuild) and connects to Nostr relays directly from the browser using `nostr-tools`'s `SimplePool` (native `WebSocket`). No server functions are required.
+
+```bash
+npm run build:web   # bundle src/core → public/core.js
+```
+
+`netlify.toml` is configured to run `npm run build:web` and deploy `public/` as a static site. The CLI/HTTP server (`npm run server`) is unaffected and still available for local or self-hosted use.
+
 ## Scripts
 
 | Script            | Description                                              |
@@ -108,6 +118,7 @@ The web UI (`/`) shows a filterable swap list and a detailed pane with the canon
 | `npm test`        | Run the reconstruction test suite (72 assertions)         |
 | `npm run lint`    | Typecheck with `tsc --noEmit`                            |
 | `npm run build`   | Compile to `dist/`                                        |
+| `npm run build:web` | Bundle `src/core` for browser → `public/core.js` (Netlify) |
 
 ## How it verifies events (strict)
 

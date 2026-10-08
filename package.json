@@ -12,6 +12,7 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/cli.js",
     "server": "tsx src/server.ts",
+    "build:web": "node scripts/build-web.mjs",
     "fixtures": "tsx src/fixtures.ts",
     "test": "tsx src/test.ts",
     "lint": "tsc -p tsconfig.json --noEmit"
@@ -23,6 +24,7 @@
   "devDependencies": {
     "@types/node": "^22.10.0",
     "@types/ws": "^8.5.13",
+    "esbuild": "^0.28.2",
     "tsx": "^4.19.2",
     "typescript": "^5.7.0"
   },
