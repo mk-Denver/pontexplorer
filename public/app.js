@@ -13,6 +13,7 @@ const relayAddBtn = $('#relay-add-btn');
 const relayResetBtn = $('#relay-reset');
 const fetchBtn = $('#fetch-relays');
 const backBtn = $('#back-btn');
+const statsBar = $('#stats-bar');
 
 let allSwaps = [];
 let allResults = [];
@@ -142,7 +143,71 @@ function detail(r) {
   };
 }
 
-/* ── relay management (localStorage only, no server) ── */
+/* ── stats ── */
+
+function fmtNum(n) {
+  if (n >= 1e9) return (n / 1e9).toFixed(2) + 'B';
+  if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M';
+  if (n >= 1e3) return (n / 1e3).toFixed(2) + 'K';
+  return String(n);
+}
+
+function computeStats(reconstructions) {
+  const stats = {
+    total: 0, settled: 0, refunded: 0, disputed: 0, active: 0,
+    cancelled: 0, expired: 0, declined: 0,
+    anomalies: 0, forks: 0,
+    fiatVolume: {},   // { currency: sum }
+    satVolume: 0,     // total sats settled
+    disputeEffects: { authorize_settlement: 0, authorize_refund: 0, cancel: 0, resume: 0 },
+    openDisputes: 0,
+  };
+  for (const r of reconstructions) {
+    stats.total++;
+    stats.anomalies += r.anomalies.length;
+    stats.forks += r.forks.length;
+    if (r.disputed) {
+      stats.disputed++;
+      if (r.dispute?.effect) stats.disputeEffects[r.dispute.effect]++;
+      if (!r.dispute?.resolvedAt) stats.openDisputes++;
+    }
+    if (r.state === 'settled') {
+      stats.settled++;
+      const cur = r.rootContent.terms.fiat.currency;
+      const amt = parseFloat(r.rootContent.terms.fiat.amount) || 0;
+      stats.fiatVolume[cur] = (stats.fiatVolume[cur] || 0) + amt;
+      const sats = parseInt(r.rootContent.terms.bitcoin.amount, 10) || 0;
+      stats.satVolume += sats;
+    } else if (r.state === 'refunded') {
+      stats.refunded++;
+    } else if (r.state === 'cancelled') {
+      stats.cancelled++;
+    } else if (r.state === 'expired') {
+      stats.expired++;
+    } else if (r.state === 'declined') {
+      stats.declined++;
+    }
+    if (!r.terminal) stats.active++;
+  }
+  return stats;
+}
+
+function renderStats(stats) {
+  if (!stats) { statsBar.style.display = 'none'; return; }
+  statsBar.style.display = 'flex';
+  $('#stat-total').textContent = stats.total;
+  $('#stat-settled').textContent = stats.settled;
+  $('#stat-refunded').textContent = stats.refunded;
+  $('#stat-disputed').textContent = `${stats.disputed}${stats.openDisputes ? ' (' + stats.openDisputes + ' open)' : ''}`;
+  $('#stat-active').textContent = stats.active;
+  const fiatParts = Object.entries(stats.fiatVolume).map(([cur, amt]) => `${fmtNum(amt)} ${cur}`);
+  $('#stat-volume').textContent = fiatParts.length ? fiatParts.join(' · ') : '0';
+  $('#stat-sats').textContent = stats.satVolume ? fmtNum(stats.satVolume) + ' sat' : '0';
+  $('#stat-anomalies').textContent = stats.anomalies;
+  $('#stat-forks').textContent = stats.forks;
+}
+
+
 
 function renderRelayChips() {
   const defSet = new Set(defaultRelays);
@@ -223,6 +288,7 @@ async function loadList() {
     allSwaps = results.filter((r) => r.reconstruction).map((r) => summary(r.reconstruction));
     const invalidCount = results.filter((r) => !r.reconstruction).length;
     statusEl.textContent = `${allSwaps.length} swap(s)${invalidCount ? ` · ${invalidCount} invalid root(s)` : ''}`;
+    renderStats(computeStats(allResults.filter((r) => r.reconstruction).map((r) => r.reconstruction)));
     renderRows();
   } catch (e) {
     statusEl.textContent = 'error: ' + e.message;

@@ -50,6 +50,18 @@ h1 { margin: 0; font-size: 18px; }
   padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 13px;
 }
 .relay-add button:hover, .relay-reset:hover { border-color: var(--accent); color: var(--accent); }
+
+/* stats bar */
+.stats-bar { display: flex; gap: 1px; background: var(--border); border-bottom: 1px solid var(--border); }
+.stat-card { flex: 1; background: var(--panel); padding: 10px 14px; min-width: 0; }
+.stat-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }
+.stat-value { font-family: var(--mono); font-size: 16px; font-weight: 600; margin-top: 2px; word-break: break-all; }
+.stat-card.settled .stat-value { color: var(--green); }
+.stat-card.refunded .stat-value { color: var(--amber); }
+.stat-card.disputed .stat-value { color: var(--red); }
+.stat-card.active .stat-value { color: var(--accent); }
+.stat-card.volume .stat-value { color: var(--purple); }
+
 main { display: grid; grid-template-columns: minmax(320px, 1fr) minmax(320px, 1.2fr); gap: 1px; background: var(--border); height: calc(100vh - 104px); }
 .list-pane, .detail-pane { background: var(--bg); overflow: auto; }
 .toolbar { display: flex; gap: 8px; padding: 10px; position: sticky; top: 0; background: var(--bg); z-index: 2; border-bottom: 1px solid var(--border); }
@@ -117,6 +129,9 @@ footer p { margin: 0; max-width: 1100px; }
 }
 
 @media (max-width: 640px) {
+  .stats-bar { flex-wrap: wrap; }
+  .stat-card { flex: 1 1 30%; }
+  .stat-value { font-size: 14px; }
   header { flex-direction: column; align-items: flex-start; gap: 6px; padding: 10px 14px; }
   h1 { font-size: 16px; }
   .sub { font-size: 11px; }
